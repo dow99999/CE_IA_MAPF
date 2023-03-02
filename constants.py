@@ -49,17 +49,11 @@ if TEST_OVERRIDES:
 # Opciones de visualizacion de laberintos
 ###
 
-# Mostrar el laberinto sin resolver
-SHOW_MAZE_REPRESENTATION = False
+# Distinc pyramids of each agent with colors
+SHOW_DISTINC_PYRAMIDS = True
 
-# Mostrar los literales del laberinto
-SHOW_LITERAL_REPRESENTATION = False
-
-# Muestra en la imagen una separacion entre casillas
-SHOW_GRID = True
-
-# Ancho y alto de una casilla en pixeles
-TILE_PIXELS = 16
+# Don't show all the exploration space, only the solution
+SHOW_ONLY_SOLUTION = False
 
 #####################################################################################################################
 # Opciones de visualizacion de variables
@@ -122,6 +116,6 @@ MAXSAT_OPTIONS = [
 from MAPF import FLAGS
 
 # Flags para usar en la opcion custom
-CUSTOM_FLAGS = 0
+CUSTOM_FLAGS = FLAGS.OPTIMIZE_PYRAMIDS
 if TEST_OVERRIDES:
   from constants_test import CUSTOM_FLAGS
