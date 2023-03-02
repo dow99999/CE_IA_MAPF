@@ -1,6 +1,6 @@
 from MAMaze import MAMaze as M
 
-TEST_OVERRIDES = True
+TEST_OVERRIDES = False
 
 SOLVERS = {
   "CaDiCaL": "cd",

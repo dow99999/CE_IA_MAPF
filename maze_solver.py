@@ -38,15 +38,6 @@ if len(sys.argv) == 3:
 else:
   maze.load_maze_from_matrix(MAZE_MATRIX)
 
-
-exit()
-
-
-
-
-
-
-
 # Cargamos las clausulas del laberinto
 multipurpose_cnf = WCNF() if USING_MAXSAT else CNF()
 multipurpose_cnf.extend(maze.get_all_clauses())
@@ -98,8 +89,9 @@ if SHOW_CLAUSE_NUMBER:
 
 if model is None:
   print("UNSAT")
-  exit()
+  model = []
 
 # Mostramos datos de la solucion
 maze.save_solved_maze_to_image(model)
-maze.save_solved_maze_with_dirs_to_image(model)
+# maze.save_solved_maze_with_dirs_to_image(model)
+maze.visualize_exploration_space(model)

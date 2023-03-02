@@ -101,9 +101,9 @@ class MAMaze:
           if raw_data[line_i][tile_type_i] != "\n":
             tile_type = translator[raw_data[line_i][tile_type_i]]
             if tile_type == self.AGENT:
-              self._agents_position.append((tile_type_i, line_i - 1))
+              self._agents_position.append((line_i - 1, tile_type_i))
             if tile_type == self.GOAL:
-              self._goals_position.append((tile_type_i, line_i - 1))
+              self._goals_position.append((line_i - 1, tile_type_i))
             maze_matrix[line_i - 1].append(tile_type)
       else:
         connection = raw_data[line_i].split("\n")[0].split(" ")
