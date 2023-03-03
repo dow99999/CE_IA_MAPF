@@ -10,10 +10,8 @@ from MAMaze import MAMaze
 import time
 class FLAGS():
   OPTIMIZE_PYRAMIDS =                     0b0000000000000001
-  
-  ARC_BLOCK_IMMEDIATE_LOOPS =             0b0000000000000000
-  ARC_ONLY_ONE_INPUT =                    0b0000000000000000
-  ARC_ONE_OUTPUT_MEANS_ONE_INPUT =        0b0000000000000000
+
+
 
 class MAPF(MAMaze):
   """
@@ -38,7 +36,7 @@ class MAPF(MAMaze):
     self.__pyramid_arc_to_tiles = {}
     self.__tiles_to_pyramid_arc = {}
 
-    # self.__final_states = {}
+    self.__final_states = {}
 
     self.flags = flags
 
@@ -46,6 +44,7 @@ class MAPF(MAMaze):
     self.__maximum_tile_literal = 1
     self.__maximum_exploration_space_literal = 1
     self.__maximum_pyramid_arc_literal = 1
+    self.__maximum_final_state_literal = 1
 
 
   def __get_card_eq1(literals):
@@ -187,8 +186,9 @@ class MAPF(MAMaze):
         for tile in self.__exploration_space[time]:
           tile_pos = self.get_position_from_literal(tile)
 
-          exploration_literal = self.__exploration_space[time][tile]
-          if exploration_literal in model:
+          exploration_literals = self.__exploration_space[time][tile]
+          
+          if len([agent for agent in exploration_literals if self.__exploration_space[time][tile][agent] in model]) > 0:
             out += add_point(tile_pos[1], tile_pos[0], -time - 1, 1, 0, 0)
           elif not SHOW_ONLY_SOLUTION:
             out += add_point(tile_pos[1], tile_pos[0], -time - 1, 0.2, 0.2, 0.5)
@@ -213,8 +213,8 @@ class MAPF(MAMaze):
         i += 1
 
       for voxel in voxels:
-        exploration_literal = self.__exploration_space[-voxel[2] - 1][self.get_literal_from_position(voxel[1], voxel[0])]
-        if exploration_literal in model:
+        exploration_literals = self.__exploration_space[-voxel[2] - 1][self.get_literal_from_position(voxel[1], voxel[0])]
+        if len([agent for agent in exploration_literals if self.__exploration_space[-voxel[2] - 1][self.get_literal_from_position(voxel[1], voxel[0])][agent] in model]) > 0:
           out += add_point(*voxel, 1,0,0)
         elif not SHOW_ONLY_SOLUTION:
           out += add_point(*voxel, *merge_colors(voxel_colors[voxel]))
@@ -277,7 +277,8 @@ class MAPF(MAMaze):
     self.__tiles_to_pyramid_arc = {}
 
     next_literal = 1
-    
+
+    #######################################################
     # Generate Tile Literal <-> Position Translators
     for row in range(self._height):
       for col in range(self._width):
@@ -289,11 +290,16 @@ class MAPF(MAMaze):
         next_literal += 1
 
     self.__maximum_tile_literal = next_literal - 1
-
+    #
+    #######################################################
+    
+    
+    
+    #######################################################
     # Generate Pyramids + exploration space
 
-    # makespan = len(self.__tile_to_position) # TBD
-    self.__makespan = 100 # TBD
+    # self.__makespan = len(self.__tile_to_position) # TBD
+    self.__makespan = 20 # TBD
     
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
@@ -313,43 +319,75 @@ class MAPF(MAMaze):
 
         for target_dist in [(agent, user_dist)]:
           for step_time in range(target_dist[1], ((self.__makespan - goal_dist) if self.flags & FLAGS.OPTIMIZE_PYRAMIDS else (self.__makespan)) + 1):
-              if step_time not in self.__exploration_space:
-                self.__exploration_space[step_time] = {}
-              if step_time not in self.__pyramids[agent]:
-                self.__pyramids[agent][step_time] = {}
+            if step_time not in self.__exploration_space:
+              self.__exploration_space[step_time] = {}
+            if step_time not in self.__pyramids[agent]:
+              self.__pyramids[agent][step_time] = {}
 
-              if tile in self.__exploration_space[step_time]:
-                copy_literal = self.__exploration_space[step_time][tile]
-              else:
-                copy_literal = next_literal
+            # if tile in self.__exploration_space[step_time]:
+            #   copy_literal = self.__exploration_space[step_time][tile]
+            # else:
+            copy_literal = next_literal
 
-              self.__pyramids[agent][step_time][tile] = copy_literal
-              self.__exploration_space[step_time][tile] = copy_literal
+            if tile not in self.__exploration_space[step_time]:
+              self.__exploration_space[step_time][tile] = {}
+            if step_time not in self.__tile_to_exploration_literals[tile]:
+              self.__tile_to_exploration_literals[tile][step_time] = []
 
-              self.__exploration_literal_to_tile[copy_literal] = tile
-              self.__tile_to_exploration_literals[tile][step_time] = copy_literal
-              
-              if copy_literal == next_literal: 
-                next_literal += 1
+            self.__pyramids[agent][step_time][tile] = copy_literal
+            self.__exploration_space[step_time][tile][agent] = copy_literal
+
+            self.__exploration_literal_to_tile[copy_literal] = tile
+            self.__tile_to_exploration_literals[tile][step_time].append(copy_literal)
+            
+            if copy_literal == next_literal:
+              next_literal += 1
 
 
     self.__maximum_exploration_space_literal = next_literal - 1
+    #
+    #######################################################
 
+
+
+    #######################################################
     # Generate arcs for each pyramid
     for agent in self.__pyramids:
       for step_time in self.__pyramids[agent]:
         for tile in self.__pyramids[agent][step_time]:
-          copy_tile = self.__tile_to_exploration_literals[tile][step_time]
           neighs = [ self.get_literal_from_position(*neigh_pos) for neigh_pos in self.get_base_neighbour_positions(*self.get_position_from_literal(tile)) ]
           
           for neigh in neighs:
             if step_time < self.__makespan:
               if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or neigh in self.__tile_to_exploration_literals and step_time + 1 in self.__tile_to_exploration_literals[neigh]:
-                self.__tiles_to_pyramid_arc[(copy_tile, self.__tile_to_exploration_literals[neigh][step_time + 1])] = next_literal
-                self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, self.__tile_to_exploration_literals[neigh][step_time + 1])
-                next_literal += 1
+                for neigh_exploration_literal in self.__tile_to_exploration_literals[neigh][step_time + 1]:
+                  for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
+                    self.__tiles_to_pyramid_arc[(copy_tile, neigh_exploration_literal)] = next_literal
+                    self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
+                  next_literal += 1
     
     self.__maximum_pyramid_arc_literal = next_literal - 1
+    #
+    #######################################################
+
+
+
+
+    #######################################################
+    # Generate final states
+    for agent_pos in self._agents_position:
+      agent = self.get_literal_from_position(*agent_pos)
+      goal_pos = [connection for connection in self._agent_goal_connections if (connection[0] == agent_pos)][0][1]
+
+      self.__final_states[agent] = {}
+      
+      for time_step in self.__pyramids[agent]:
+        self.__final_states[agent][time_step] = next_literal
+        next_literal += 1
+
+    self.__maximum_final_state_literal = next_literal - 1
+    #
+    #######################################################
 
     self.__maximum_literal = next_literal - 1
     self.__idpool = IDPool(occupied=[[1, self.__maximum_literal]])
@@ -397,6 +435,7 @@ class MAPF(MAMaze):
     clauses.extend(self.get_goal_clauses())
     print("Generating Hard Restrictions  70.00%", end="\r")
     print("Generating Hard Restrictions 100.00%")
+
     return clauses
 
   def get_agent_clauses(self):
@@ -405,7 +444,7 @@ class MAPF(MAMaze):
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
       clauses.append([agent])
-      clauses.append([self.__exploration_space[0][agent]])
+      clauses.append([self.__exploration_space[0][agent][agent]])
 
     return clauses
 
@@ -415,7 +454,9 @@ class MAPF(MAMaze):
     for goal_pos in self._goals_position:
       goal = self.get_literal_from_position(*goal_pos)
       clauses.append([goal])
-      clauses.append([self.__exploration_space[self.__makespan][goal]])
+      for agent in self.__pyramids:
+        if agent in self.__exploration_space[self.__makespan][goal]:
+          clauses.append([self.__exploration_space[self.__makespan][goal][agent]])
 
     return clauses
 
