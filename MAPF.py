@@ -10,6 +10,8 @@ from MAMaze import MAMaze
 import time
 class FLAGS():
   OPTIMIZE_PYRAMIDS =                     0b0000000000000001
+  NEW_PYRAMID_GENERATION =                0b0000000000000010
+  OPTIMIZE_MAKESTEP =                     0b0000000000000100
 
 
 
@@ -45,6 +47,8 @@ class MAPF(MAMaze):
     self.__maximum_exploration_space_literal = 1
     self.__maximum_pyramid_arc_literal = 1
     self.__maximum_final_state_literal = 1
+
+    self.__makespan = None
 
 
   def __get_card_eq1(literals):
@@ -264,6 +268,37 @@ class MAPF(MAMaze):
   ## Clause generators
   #######################################################################
 
+  def __propagate_pyramid_from_position(self, row, col, pyramid={}, time_step=0, reverse=False):
+    if not reverse and time_step > self.__makespan: return
+    if reverse and time_step < 0: return
+
+    next_time_step = time_step + (1 if not reverse else -1)
+
+    if time_step not in pyramid:
+      pyramid[time_step] = {}
+    if (next_time_step) not in pyramid:
+      pyramid[next_time_step] = {}
+    
+    # Current
+    pyramid[time_step][self.get_literal_from_position(row, col)] = True
+    
+    neigh_pos = self.get_base_neighbour_positions(row, col)
+
+    # Wait
+    if self.get_literal_from_position(row, col) not in pyramid[next_time_step]:
+      self.__propagate_pyramid_from_position(row, col, pyramid, next_time_step, reverse)
+    
+    # Neighs
+    for pos in neigh_pos:
+      if self.get_literal_from_position(pos[0], pos[1]) not in pyramid[next_time_step]:
+        self.__propagate_pyramid_from_position(pos[0], pos[1], pyramid, next_time_step, reverse)
+
+
+    
+
+    
+
+
   def _load_all_literals(self):
     self.__tile_to_position = []
     self.__position_to_tile = {}
@@ -297,9 +332,6 @@ class MAPF(MAMaze):
     
     #######################################################
     # Generate Pyramids + exploration space
-
-    # self.__makespan = len(self.__tile_to_position) # TBD
-    self.__makespan = 20 # TBD
     
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
@@ -308,41 +340,100 @@ class MAPF(MAMaze):
       
       self.__pyramids[agent] = {}
 
-      for tile_pos in self.__position_to_tile:
-        tile = self.get_literal_from_position(*tile_pos)
-        
-        if tile not in self.__tile_to_exploration_literals:
-          self.__tile_to_exploration_literals[tile] = {}
-        
-        user_dist = (abs(tile_pos[0] - agent_pos[0]) + abs(tile_pos[1] - agent_pos[1]))
-        goal_dist = (abs(tile_pos[0] - goal_pos[0]) + abs(tile_pos[1] - goal_pos[1]))
+      if self.__makespan is None:
+        self.__makespan = len(self.__tile_to_position) // 2 # TBD
 
-        for target_dist in [(agent, user_dist)]:
-          for step_time in range(target_dist[1], ((self.__makespan - goal_dist) if self.flags & FLAGS.OPTIMIZE_PYRAMIDS else (self.__makespan)) + 1):
-            if step_time not in self.__exploration_space:
-              self.__exploration_space[step_time] = {}
-            if step_time not in self.__pyramids[agent]:
-              self.__pyramids[agent][step_time] = {}
+      ##########################################################################################################
+      # Forma nueva
+      if self.flags & FLAGS.NEW_PYRAMID_GENERATION:
+        agent_pyramid = {}
+        goal_pyramid = {}
 
-            # if tile in self.__exploration_space[step_time]:
-            #   copy_literal = self.__exploration_space[step_time][tile]
-            # else:
-            copy_literal = next_literal
+        # Calculate pyramids from agent and goal
+        self.__propagate_pyramid_from_position(*agent_pos, agent_pyramid)
+        self.__propagate_pyramid_from_position(*goal_pos, goal_pyramid, self.__makespan, reverse=True)
 
-            if tile not in self.__exploration_space[step_time]:
-              self.__exploration_space[step_time][tile] = {}
-            if step_time not in self.__tile_to_exploration_literals[tile]:
-              self.__tile_to_exploration_literals[tile][step_time] = []
+        for step_time in agent_pyramid:
+          if step_time not in self.__exploration_space:
+            self.__exploration_space[step_time] = {}
+          if step_time not in self.__pyramids[agent]:
+            self.__pyramids[agent][step_time] = {}
 
-            self.__pyramids[agent][step_time][tile] = copy_literal
-            self.__exploration_space[step_time][tile][agent] = copy_literal
-
-            self.__exploration_literal_to_tile[copy_literal] = tile
-            self.__tile_to_exploration_literals[tile][step_time].append(copy_literal)
+          for tile in agent_pyramid[step_time]:
+            if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or (step_time in goal_pyramid and tile in goal_pyramid[step_time]): # Intersect pyramids
+              if tile not in self.__exploration_space[step_time]:
+                self.__exploration_space[step_time][tile] = {}
+              if tile not in self.__tile_to_exploration_literals:
+                self.__tile_to_exploration_literals[tile] = {}
+              if step_time not in self.__tile_to_exploration_literals[tile]:
+                self.__tile_to_exploration_literals[tile][step_time] = []
             
-            if copy_literal == next_literal:
-              next_literal += 1
+              self.__pyramids[agent][step_time][tile] = next_literal
+              self.__exploration_space[step_time][tile][agent] = next_literal
 
+              self.__exploration_literal_to_tile[next_literal] = tile
+              self.__tile_to_exploration_literals[tile][step_time].append(next_literal)
+              next_literal += 1
+      ##########################################################################################################
+
+
+
+      ##########################################################################################################
+      # Forma antigua
+      if not(self.flags & FLAGS.NEW_PYRAMID_GENERATION):
+        for tile_pos in self.__position_to_tile:
+          tile = self.get_literal_from_position(*tile_pos)
+          
+          if tile not in self.__tile_to_exploration_literals:
+            self.__tile_to_exploration_literals[tile] = {}
+          
+          user_dist = (abs(tile_pos[0] - agent_pos[0]) + abs(tile_pos[1] - agent_pos[1]))
+          goal_dist = (abs(tile_pos[0] - goal_pos[0]) + abs(tile_pos[1] - goal_pos[1]))
+
+          for target_dist in [(agent, user_dist)]:
+            for step_time in range(target_dist[1], ((self.__makespan - goal_dist) if self.flags & FLAGS.OPTIMIZE_PYRAMIDS else (self.__makespan)) + 1):
+              if step_time not in self.__exploration_space:
+                self.__exploration_space[step_time] = {}
+              if step_time not in self.__pyramids[agent]:
+                self.__pyramids[agent][step_time] = {}
+
+              # if tile in self.__exploration_space[step_time]:
+              #   copy_literal = self.__exploration_space[step_time][tile]
+              # else:
+              copy_literal = next_literal
+
+              if tile not in self.__exploration_space[step_time]:
+                self.__exploration_space[step_time][tile] = {}
+              if step_time not in self.__tile_to_exploration_literals[tile]:
+                self.__tile_to_exploration_literals[tile][step_time] = []
+
+              self.__pyramids[agent][step_time][tile] = copy_literal
+              self.__exploration_space[step_time][tile][agent] = copy_literal
+
+              self.__exploration_literal_to_tile[copy_literal] = tile
+              self.__tile_to_exploration_literals[tile][step_time].append(copy_literal)
+              
+              if copy_literal == next_literal:
+                next_literal += 1
+      ##########################################################################################################
+
+    if self.flags & FLAGS.OPTIMIZE_MAKESTEP:
+      max_times = []
+      for agent in self.__pyramids:
+        agent_pos = self.get_position_from_literal(agent)
+        goal_pos = [connection for connection in self._agent_goal_connections if (connection[0] == agent_pos)][0][1]
+        goal = self.get_literal_from_position(*goal_pos)
+        max_times.append(-1)
+
+        for step_time in range(self.__makespan, 0, -1):
+          if goal not in self.__pyramids[agent][step_time]: break
+          if max_times[len(max_times) - 1] == -1 or max_times[len(max_times) - 1] > step_time:
+            max_times[len(max_times) - 1] = step_time
+      
+
+      if self.__makespan == len(self.__tile_to_position) // 2:
+        self.__makespan = max(max_times)
+        self._load_all_literals()
 
     self.__maximum_exploration_space_literal = next_literal - 1
     #
@@ -362,7 +453,10 @@ class MAPF(MAMaze):
               if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or neigh in self.__tile_to_exploration_literals and step_time + 1 in self.__tile_to_exploration_literals[neigh]:
                 for neigh_exploration_literal in self.__tile_to_exploration_literals[neigh][step_time + 1]:
                   for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
-                    self.__tiles_to_pyramid_arc[(copy_tile, neigh_exploration_literal)] = next_literal
+                    if copy_tile not in self.__tiles_to_pyramid_arc:
+                      self.__tiles_to_pyramid_arc[copy_tile] = {}
+
+                    self.__tiles_to_pyramid_arc[copy_tile][neigh_exploration_literal] = next_literal
                     self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
                   next_literal += 1
     
@@ -434,6 +528,7 @@ class MAPF(MAMaze):
     print("Generating Hard Restrictions  60.00%", end="\r")
     clauses.extend(self.get_goal_clauses())
     print("Generating Hard Restrictions  70.00%", end="\r")
+    clauses.extend(self.get_tile_clauses())
     print("Generating Hard Restrictions 100.00%")
 
     return clauses
@@ -459,6 +554,34 @@ class MAPF(MAMaze):
           clauses.append([self.__exploration_space[self.__makespan][goal][agent]])
 
     return clauses
+
+
+  def get_tile_clauses(self):
+    return []
+  
+    clauses = []
+
+    for from_tile in self.__tiles_to_pyramid_arc:
+      arcs = []
+      pairs = []
+      for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
+        arcs.append(self.__tiles_to_pyramid_arc[from_tile][to_tile])
+        pairs.extend([from_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
+      
+      clauses.append([-to_tile] + pairs)
+      
+      clauses.extend([clause for clause in card.CardEnc.atmost(
+          lits=arcs,
+          bound=1,
+          vpool=self.__idpool,
+          encoding=card.EncType.pairwise
+        ).clauses
+      ])
+
+
+
+    return clauses
+
 
   def add_soft_clauses(self, wcnf):
     print("Generating Soft Restrictions   0.00%", end="\r")
