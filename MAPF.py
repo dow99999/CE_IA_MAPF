@@ -446,7 +446,7 @@ class MAPF(MAMaze):
     for agent in self.__pyramids:
       for step_time in self.__pyramids[agent]:
         for tile in self.__pyramids[agent][step_time]:
-          neighs = [ self.get_literal_from_position(*neigh_pos) for neigh_pos in self.get_base_neighbour_positions(*self.get_position_from_literal(tile)) ]
+          neighs = [tile] + [ self.get_literal_from_position(*neigh_pos) for neigh_pos in self.get_base_neighbour_positions(*self.get_position_from_literal(tile)) ]
           
           for neigh in neighs:
             if step_time < self.__makespan:
@@ -472,12 +472,14 @@ class MAPF(MAMaze):
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
       goal_pos = [connection for connection in self._agent_goal_connections if (connection[0] == agent_pos)][0][1]
+      goal = self.get_literal_from_position(*goal_pos)
 
       self.__final_states[agent] = {}
       
       for time_step in self.__pyramids[agent]:
-        self.__final_states[agent][time_step] = next_literal
-        next_literal += 1
+        if goal in self.__pyramids[agent][time_step]:
+          self.__final_states[agent][time_step] = next_literal
+          next_literal += 1
 
     self.__maximum_final_state_literal = next_literal - 1
     #
@@ -539,6 +541,9 @@ class MAPF(MAMaze):
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
       clauses.append([agent])
+      # H5
+      clauses.append([self.__final_states[agent][self.__makespan]])
+      # H7
       clauses.append([self.__exploration_space[0][agent][agent]])
 
     return clauses
@@ -551,14 +556,13 @@ class MAPF(MAMaze):
       clauses.append([goal])
       for agent in self.__pyramids:
         if agent in self.__exploration_space[self.__makespan][goal]:
+          # H8
           clauses.append([self.__exploration_space[self.__makespan][goal][agent]])
 
     return clauses
 
 
   def get_tile_clauses(self):
-    return []
-  
     clauses = []
 
     for from_tile in self.__tiles_to_pyramid_arc:
@@ -567,16 +571,97 @@ class MAPF(MAMaze):
       for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
         arcs.append(self.__tiles_to_pyramid_arc[from_tile][to_tile])
         pairs.extend([from_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
+        # H1
+        clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
+        # H2
+        clauses.append([-from_tile, -self.__tiles_to_pyramid_arc[from_tile][to_tile], to_tile])
+
+        if to_tile in self.__tiles_to_pyramid_arc and from_tile in self.__tiles_to_pyramid_arc[to_tile]:
+          # H9
+          clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], -self.__tiles_to_pyramid_arc[to_tile][from_tile]])
+        
+        # H10
+        if to_tile in self.__tiles_to_pyramid_arc and to_tile in self.__tiles_to_pyramid_arc[to_tile]:
+          clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], self.__tiles_to_pyramid_arc[to_tile][to_tile]])
       
-      clauses.append([-to_tile] + pairs)
-      
-      clauses.extend([clause for clause in card.CardEnc.atmost(
+      # C1
+      clauses.extend([clause for clause in card.CardEnc.equals(
           lits=arcs,
           bound=1,
           vpool=self.__idpool,
           encoding=card.EncType.pairwise
         ).clauses
       ])
+
+    for agent in self.__pyramids:
+      for time_step in self.__pyramids[agent]:
+        for tile in self.__pyramids[agent][time_step]:
+          # proyeccion
+          clauses.append([-self.__pyramids[agent][time_step][tile], tile])
+
+        if time_step + 1 in self.__pyramids[agent]:
+          aux = []
+          for tile in self.__pyramids[agent][time_step]:
+            aux.append(self.__pyramids[agent][time_step][tile])
+          for tile in self.__pyramids[agent][time_step + 1]:
+            # H3
+            clauses.append([-tile] + aux)
+
+
+    for tile_pos in self.__position_to_tile:
+      tile = self.get_literal_from_position(*tile_pos)
+      aux = []
+      for time_step in self.__exploration_space:
+        if tile in self.__exploration_space[time_step]:
+          for agent in self.__exploration_space[time_step][tile]:
+            aux.append(self.__exploration_space[time_step][tile][agent])
+      # proyeccion
+      clauses.append([-tile] + aux)
+
+
+    
+    for agent in self.__final_states:
+      agent_pos = self.get_position_from_literal(agent)
+      goal_pos = [connection for connection in self._agent_goal_connections if (connection[0] == agent_pos)][0][1]
+      goal = self.get_literal_from_position(*goal_pos)
+      for time_step in self.__final_states[agent]:
+        if time_step + 1 in self.__final_states[agent]:
+          # H6 ->
+          clauses.append([-self.__pyramids[agent][time_step][goal], -self.__final_states[agent][time_step + 1], self.__final_states[agent][time_step]])
+          # H6 <-
+          clauses.append([-self.__final_states[agent][time_step], self.__final_states[agent][time_step + 1]])
+          clauses.append([-self.__final_states[agent][time_step], self.__pyramids[agent][time_step][goal]])
+
+    for time_step in self.__exploration_space:
+      for tile in self.__exploration_space[time_step]:
+        tiles = []
+        for agent in self.__exploration_space[time_step][tile]:
+          tiles.append(self.__exploration_space[time_step][tile][agent])
+        # C2
+        if len(tiles) > 1:
+          clauses.extend([clause for clause in card.CardEnc.atmost(
+            lits=tiles,
+            bound=1,
+            vpool=self.__idpool,
+            encoding=card.EncType.pairwise
+            ).clauses
+          ])
+
+
+    for agent in self.__pyramids:
+      for time_step in self.__pyramids[agent]:
+        p_slice = []
+        for tile in self.__pyramids[agent][time_step]:
+          p_slice.append(self.__pyramids[agent][time_step][tile])
+        # C3
+        if len(p_slice) > 0:
+          clauses.extend([clause for clause in card.CardEnc.equals(
+            lits=p_slice,
+            bound=1,
+            vpool=self.__idpool,
+            encoding=card.EncType.pairwise
+            ).clauses
+          ])        
 
 
 
@@ -586,4 +671,10 @@ class MAPF(MAMaze):
   def add_soft_clauses(self, wcnf):
     print("Generating Soft Restrictions   0.00%", end="\r")
     
+    for agent in self.__final_states:
+      for time_step in self.__final_states[agent]:
+        # S1
+        wcnf.append([self.__final_states[agent][time_step]], weight=1)
+      
+
     print("Generating Soft Restrictions 100.00%")

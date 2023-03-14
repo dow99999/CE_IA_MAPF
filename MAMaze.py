@@ -108,6 +108,7 @@ class MAMaze:
       else:
         connection = raw_data[line_i].split("\n")[0].split(" ")
         self._agent_goal_connections.append((self._agents_position[int(connection[0]) - 1], self._goals_position[int(connection[1]) - 1]))
+        print(self._agent_goal_connections[len(self._agent_goal_connections) - 1])
       
 
     self.load_maze_from_matrix(maze_matrix)

@@ -11,7 +11,7 @@ from MAPF import MAPF
 from MAPF import FLAGS
 
 # sys.stdout.reconfigure(encoding='utf-16')
-
+sys.setrecursionlimit(10000)
 
 if len(sys.argv) not in [2, 3] or sys.argv[1] not in OPTIONS:
   print("Needs one argument from this list ", [ int(o) for o in OPTIONS ],": ", sep="")
