@@ -519,7 +519,7 @@ class MAPF(MAMaze):
     for agent_pos in self._agents_position:
       agent = self.get_literal_from_position(*agent_pos)
       
-      if agent not in self.__boards[agent]:
+      if agent not in self.__boards:
         self.__boards[agent] = {}
       for tile_pos in self.__position_to_tile:
         tile = self.get_literal_from_position(*tile_pos)
