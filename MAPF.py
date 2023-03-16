@@ -11,7 +11,23 @@ import time
 class FLAGS():
   OPTIMIZE_PYRAMIDS =                     0b0000000000000001
   NEW_PYRAMID_GENERATION =                0b0000000000000010
-  OPTIMIZE_MAKESTEP =                     0b0000000000000100
+  OPTIMIZE_MAKESPAN =                     0b0000000000000100
+
+  RESTRICTION_H1 =                        0b0000000000001000
+  RESTRICTION_H2 =                        0b0000000000010000
+  RESTRICTION_H3 =                        0b0000000000100000
+  RESTRICTION_H5 =                        0b0000000001000000
+  RESTRICTION_H6 =                        0b0000000010000000
+  RESTRICTION_H7 =                        0b0000000100000000
+  RESTRICTION_H8 =                        0b0000001000000000
+  RESTRICTION_H9 =                        0b0000010000000000
+  RESTRICTION_H10 =                       0b0000100000000000
+  RESTRICTION_C1 =                        0b0001000000000000
+  RESTRICTION_C2 =                        0b0010000000000000
+
+  RECTRICTION_O_C3 =                      0b0100000000000000
+  RESTRICTION_O_H11 =                     0b1000000000000000
+
 
 
 
@@ -417,7 +433,7 @@ class MAPF(MAMaze):
                 next_literal += 1
       ##########################################################################################################
 
-    if self.flags & FLAGS.OPTIMIZE_MAKESTEP:
+    if self.flags & FLAGS.OPTIMIZE_MAKESPAN:
       max_times = []
       for agent in self.__pyramids:
         agent_pos = self.get_position_from_literal(agent)
@@ -443,6 +459,7 @@ class MAPF(MAMaze):
 
     #######################################################
     # Generate arcs for each pyramid
+    # TODO: Fix duplicated arcs between pyramids
     for agent in self.__pyramids:
       for step_time in self.__pyramids[agent]:
         for tile in self.__pyramids[agent][step_time]:
@@ -542,9 +559,9 @@ class MAPF(MAMaze):
       agent = self.get_literal_from_position(*agent_pos)
       clauses.append([agent])
       # H5
-      clauses.append([self.__final_states[agent][self.__makespan]])
+      if self.flags & FLAGS.RESTRICTION_H5: clauses.append([self.__final_states[agent][self.__makespan]])
       # H7
-      clauses.append([self.__exploration_space[0][agent][agent]])
+      if self.flags & FLAGS.RESTRICTION_H7: clauses.append([self.__exploration_space[0][agent][agent]])
 
     return clauses
 
@@ -554,10 +571,11 @@ class MAPF(MAMaze):
     for goal_pos in self._goals_position:
       goal = self.get_literal_from_position(*goal_pos)
       clauses.append([goal])
-      for agent in self.__pyramids:
-        if agent in self.__exploration_space[self.__makespan][goal]:
-          # H8
-          clauses.append([self.__exploration_space[self.__makespan][goal][agent]])
+      if self.flags & FLAGS.RESTRICTION_H8:
+        for agent in self.__pyramids:
+          if agent in self.__exploration_space[self.__makespan][goal]:
+            # H8
+            clauses.append([self.__exploration_space[self.__makespan][goal][agent]])
 
     return clauses
 
@@ -572,20 +590,20 @@ class MAPF(MAMaze):
         arcs.append(self.__tiles_to_pyramid_arc[from_tile][to_tile])
         pairs.extend([from_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
         # H1
-        clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
+        if self.flags & FLAGS.RESTRICTION_H1: clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
         # H2
-        clauses.append([-from_tile, -self.__tiles_to_pyramid_arc[from_tile][to_tile], to_tile])
+        if self.flags & FLAGS.RESTRICTION_H2: clauses.append([-from_tile, -self.__tiles_to_pyramid_arc[from_tile][to_tile], to_tile])
 
         if to_tile in self.__tiles_to_pyramid_arc and from_tile in self.__tiles_to_pyramid_arc[to_tile]:
           # H9
-          clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], -self.__tiles_to_pyramid_arc[to_tile][from_tile]])
+          if self.flags & FLAGS.RESTRICTION_H9: clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], -self.__tiles_to_pyramid_arc[to_tile][from_tile]])
         
         # H10
         if to_tile in self.__tiles_to_pyramid_arc and to_tile in self.__tiles_to_pyramid_arc[to_tile]:
-          clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], self.__tiles_to_pyramid_arc[to_tile][to_tile]])
+          if self.flags & FLAGS.RESTRICTION_H10: clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], self.__tiles_to_pyramid_arc[to_tile][to_tile]])
       
       # C1
-      clauses.extend([clause for clause in card.CardEnc.equals(
+      if self.flags & FLAGS.RESTRICTION_C1: clauses.extend([clause for clause in card.CardEnc.equals(
           lits=arcs,
           bound=1,
           vpool=self.__idpool,
@@ -600,13 +618,18 @@ class MAPF(MAMaze):
           clauses.append([-self.__pyramids[agent][time_step][tile], tile])
 
         if time_step + 1 in self.__pyramids[agent]:
-          aux = []
+          aux3 = []
+          aux11 = []
+          for tile in self.__pyramids[agent][time_step + 1]:
+            aux11.append(self.__pyramids[agent][time_step + 1][tile])
           for tile in self.__pyramids[agent][time_step]:
-            aux.append(self.__pyramids[agent][time_step][tile])
+            aux3.append(self.__pyramids[agent][time_step][tile])
           for tile in self.__pyramids[agent][time_step + 1]:
             # H3
-            clauses.append([-tile] + aux)
-
+            if self.flags & FLAGS.RESTRICTION_H3: clauses.append([-self.__pyramids[agent][time_step + 1][tile]] + aux3)
+          for tile in self.__pyramids[agent][time_step]:
+            # H11
+            if (self.flags & FLAGS.RESTRICTION_O_H11) and len(aux11) > 0: clauses.append([-self.__pyramids[agent][time_step][tile]] + aux11)
 
     for tile_pos in self.__position_to_tile:
       tile = self.get_literal_from_position(*tile_pos)
@@ -626,11 +649,12 @@ class MAPF(MAMaze):
       goal = self.get_literal_from_position(*goal_pos)
       for time_step in self.__final_states[agent]:
         if time_step + 1 in self.__final_states[agent]:
-          # H6 ->
-          clauses.append([-self.__pyramids[agent][time_step][goal], -self.__final_states[agent][time_step + 1], self.__final_states[agent][time_step]])
-          # H6 <-
-          clauses.append([-self.__final_states[agent][time_step], self.__final_states[agent][time_step + 1]])
-          clauses.append([-self.__final_states[agent][time_step], self.__pyramids[agent][time_step][goal]])
+          if self.flags & FLAGS.RESTRICTION_H6:
+            # H6 ->
+            clauses.append([-self.__pyramids[agent][time_step][goal], -self.__final_states[agent][time_step + 1], self.__final_states[agent][time_step]])
+            # H6 <-
+            clauses.append([-self.__final_states[agent][time_step], self.__final_states[agent][time_step + 1]])
+            clauses.append([-self.__final_states[agent][time_step], self.__pyramids[agent][time_step][goal]])
 
     for time_step in self.__exploration_space:
       for tile in self.__exploration_space[time_step]:
@@ -638,14 +662,15 @@ class MAPF(MAMaze):
         for agent in self.__exploration_space[time_step][tile]:
           tiles.append(self.__exploration_space[time_step][tile][agent])
         # C2
-        if len(tiles) > 1:
-          clauses.extend([clause for clause in card.CardEnc.atmost(
-            lits=tiles,
-            bound=1,
-            vpool=self.__idpool,
-            encoding=card.EncType.pairwise
-            ).clauses
-          ])
+        if self.flags & FLAGS.RESTRICTION_C2:
+          if len(tiles) > 1:
+            clauses.extend([clause for clause in card.CardEnc.atmost(
+              lits=tiles,
+              bound=1,
+              vpool=self.__idpool,
+              encoding=card.EncType.pairwise
+              ).clauses
+            ])
 
 
     for agent in self.__pyramids:
@@ -654,7 +679,7 @@ class MAPF(MAMaze):
         for tile in self.__pyramids[agent][time_step]:
           p_slice.append(self.__pyramids[agent][time_step][tile])
         # C3
-        if len(p_slice) > 0:
+        if (self.flags & FLAGS.RECTRICTION_O_C3) and len(p_slice) > 0:
           clauses.extend([clause for clause in card.CardEnc.equals(
             lits=p_slice,
             bound=1,
