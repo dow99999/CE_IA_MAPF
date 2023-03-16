@@ -450,6 +450,7 @@ class MAPF(MAMaze):
       if self.__makespan == len(self.__tile_to_position) // 2:
         self.__makespan = max(max_times)
         self._load_all_literals()
+        return
 
     self.__maximum_exploration_space_literal = next_literal - 1
     #
@@ -459,23 +460,20 @@ class MAPF(MAMaze):
 
     #######################################################
     # Generate arcs for each pyramid
-    # TODO: Fix duplicated arcs between pyramids
-    for agent in self.__pyramids:
-      for step_time in self.__pyramids[agent]:
-        for tile in self.__pyramids[agent][step_time]:
-          neighs = [tile] + [ self.get_literal_from_position(*neigh_pos) for neigh_pos in self.get_base_neighbour_positions(*self.get_position_from_literal(tile)) ]
-          
-          for neigh in neighs:
-            if step_time < self.__makespan:
-              if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or neigh in self.__tile_to_exploration_literals and step_time + 1 in self.__tile_to_exploration_literals[neigh]:
-                for neigh_exploration_literal in self.__tile_to_exploration_literals[neigh][step_time + 1]:
-                  for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
-                    if copy_tile not in self.__tiles_to_pyramid_arc:
-                      self.__tiles_to_pyramid_arc[copy_tile] = {}
+    for step_time in self.__exploration_space:
+      for tile in self.__exploration_space[step_time]:
+        neighs = [tile] + [ self.get_literal_from_position(*neigh_pos) for neigh_pos in self.get_base_neighbour_positions(*self.get_position_from_literal(tile)) ]
+        for neigh in neighs:
+          if step_time < self.__makespan:
+            if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or neigh in self.__tile_to_exploration_literals and step_time + 1 in self.__tile_to_exploration_literals[neigh]:
+              for neigh_exploration_literal in self.__tile_to_exploration_literals[neigh][step_time + 1]:
+                for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
+                  if copy_tile not in self.__tiles_to_pyramid_arc:
+                    self.__tiles_to_pyramid_arc[copy_tile] = {}
 
-                    self.__tiles_to_pyramid_arc[copy_tile][neigh_exploration_literal] = next_literal
-                    self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
-                  next_literal += 1
+                  self.__tiles_to_pyramid_arc[copy_tile][neigh_exploration_literal] = next_literal
+                  self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
+                next_literal += 1
     
     self.__maximum_pyramid_arc_literal = next_literal - 1
     #
