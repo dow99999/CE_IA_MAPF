@@ -55,6 +55,7 @@ class MAPF(MAMaze):
     self.__tiles_to_pyramid_arc = {}
 
     self.__final_states = {}
+    self.__boards = {}
 
     self.flags = flags
 
@@ -63,6 +64,7 @@ class MAPF(MAMaze):
     self.__maximum_exploration_space_literal = 1
     self.__maximum_pyramid_arc_literal = 1
     self.__maximum_final_state_literal = 1
+    self.__maximum_board_literal = 1
 
     self.__makespan = None
 
@@ -384,12 +386,22 @@ class MAPF(MAMaze):
               if step_time not in self.__tile_to_exploration_literals[tile]:
                 self.__tile_to_exploration_literals[tile][step_time] = []
             
-              self.__pyramids[agent][step_time][tile] = next_literal
-              self.__exploration_space[step_time][tile][agent] = next_literal
+              if tile in self.__exploration_space[step_time]:
+                copy_literal = [self.__exploration_space[step_time][tile][agent] for agent in self.__exploration_space[step_time][tile]]
+                if len(copy_literal) > 0: 
+                  copy_literal = copy_literal[0]
+                else:
+                  copy_literal = next_literal
+              else:
+                copy_literal = next_literal
 
-              self.__exploration_literal_to_tile[next_literal] = tile
-              self.__tile_to_exploration_literals[tile][step_time].append(next_literal)
-              next_literal += 1
+              self.__pyramids[agent][step_time][tile] = copy_literal
+              self.__exploration_space[step_time][tile][agent] = copy_literal
+
+              self.__exploration_literal_to_tile[copy_literal] = tile
+              self.__tile_to_exploration_literals[tile][step_time].append(copy_literal)
+              if next_literal == copy_literal:
+                next_literal += 1
       ##########################################################################################################
 
 
@@ -413,10 +425,10 @@ class MAPF(MAMaze):
               if step_time not in self.__pyramids[agent]:
                 self.__pyramids[agent][step_time] = {}
 
-              # if tile in self.__exploration_space[step_time]:
-              #   copy_literal = self.__exploration_space[step_time][tile]
-              # else:
-              copy_literal = next_literal
+              if tile in self.__exploration_space[step_time]:
+                copy_literal = self.__exploration_space[step_time][tile]
+              else:
+                copy_literal = next_literal
 
               if tile not in self.__exploration_space[step_time]:
                 self.__exploration_space[step_time][tile] = {}
@@ -500,6 +512,24 @@ class MAPF(MAMaze):
     #
     #######################################################
 
+
+
+    #######################################################
+    # Generate boards
+    for agent_pos in self._agents_position:
+      agent = self.get_literal_from_position(*agent_pos)
+      
+      if agent not in self.__boards[agent]:
+        self.__boards[agent] = {}
+      for tile_pos in self.__position_to_tile:
+        tile = self.get_literal_from_position(*tile_pos)
+        self.__boards[agent][tile] = next_literal
+        next_literal += 1
+
+
+    self.__maximum_board_literal = next_literal - 1
+    #
+    #######################################################
     self.__maximum_literal = next_literal - 1
     self.__idpool = IDPool(occupied=[[1, self.__maximum_literal]])
 
