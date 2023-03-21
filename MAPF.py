@@ -475,6 +475,17 @@ class MAPF(MAMaze):
                   self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
                 next_literal += 1
     
+
+    # 6 11 7
+    tile = self.get_literal_from_position(6, 11)
+    tile_to = self.get_literal_from_position(7, 11)
+    for step_time in self.__tile_to_exploration_literals[tile]:
+      for copy_literal in self.__tile_to_exploration_literals[tile][step_time]:
+        print(step_time, self.__tiles_to_pyramid_arc[copy_literal])
+
+    for copy_literal in self.__tile_to_exploration_literals[tile_to][7]:
+      print(copy_literal)
+
     self.__maximum_pyramid_arc_literal = next_literal - 1
     #
     #######################################################
@@ -583,10 +594,9 @@ class MAPF(MAMaze):
 
     for from_tile in self.__tiles_to_pyramid_arc:
       arcs = []
-      pairs = []
       for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
         arcs.append(self.__tiles_to_pyramid_arc[from_tile][to_tile])
-        pairs.extend([from_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
+
         # H1
         if self.flags & FLAGS.RESTRICTION_H1: clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
         # H2
@@ -608,6 +618,28 @@ class MAPF(MAMaze):
           encoding=card.EncType.pairwise
         ).clauses
       ])
+    
+    done_arcs = []
+    for from_tile in self.__tiles_to_pyramid_arc:
+      for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
+        arcs = set()
+        for from_tile2 in self.__tiles_to_pyramid_arc:
+          if to_tile in self.__tiles_to_pyramid_arc and from_tile2 in self.__tiles_to_pyramid_arc[to_tile]:
+            arcs.add(self.__tiles_to_pyramid_arc[to_tile][from_tile2])
+        if arcs not in done_arcs:
+          done_arcs.append(arcs)
+
+          if len(arcs) > 0:
+            clauses.extend([clause for clause in card.CardEnc.equals(
+                lits=list(arcs),
+                bound=1,
+                vpool=self.__idpool,
+                encoding=card.EncType.pairwise
+              ).clauses
+            ])
+
+
+
 
     for agent in self.__pyramids:
       for time_step in self.__pyramids[agent]:

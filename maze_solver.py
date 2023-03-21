@@ -91,6 +91,8 @@ if model is None:
   print("UNSAT")
   model = []
 
+print(model)
+
 # Mostramos datos de la solucion
 maze.save_solved_maze_to_image(model)
 # maze.save_solved_maze_with_dirs_to_image(model)
