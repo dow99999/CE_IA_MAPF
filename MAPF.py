@@ -246,7 +246,7 @@ class MAPF(MAMaze):
           for to_tile in self.__tiles_to_pyramid_arc[time_step][from_tile]:
             from_tile_pos = self.get_position_from_literal(self.__exploration_literal_to_tile[from_tile])
             to_tile_pos = self.get_position_from_literal(self.__exploration_literal_to_tile[to_tile])
-            if self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile] in model:
+            if self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile] in model and to_tile in model:
               out += add_point((from_tile_pos[1] + to_tile_pos[1]) / 2, (from_tile_pos[0] + to_tile_pos[0]) / 2, -(time_step + 1.5), 0.3, 0.3, 0.3)
             elif not(SHOW_ONLY_SOLUTION):
               out += add_point((from_tile_pos[1] + to_tile_pos[1]) / 2, (from_tile_pos[0] + to_tile_pos[0]) / 2, -(time_step + 1.5), 0.9, 0.9, 0.9)
@@ -488,7 +488,7 @@ class MAPF(MAMaze):
                 for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
                   if copy_tile not in self.__tiles_to_pyramid_arc[step_time]:
                     self.__tiles_to_pyramid_arc[step_time][copy_tile] = {}
-                  if neigh_exploration_literal not in self.__tiles_to_pyramid_arc[step_time]:
+                  if neigh_exploration_literal not in self.__tiles_to_pyramid_arc_inverse[step_time]:
                     self.__tiles_to_pyramid_arc_inverse[step_time][neigh_exploration_literal] = {}
 
                   self.__tiles_to_pyramid_arc[step_time][copy_tile][neigh_exploration_literal] = next_literal

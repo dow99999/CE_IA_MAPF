@@ -53,7 +53,7 @@ if TEST_OVERRIDES:
 SHOW_DISTINC_PYRAMIDS = True
 
 # Don't show all the exploration space, only the solution
-SHOW_ONLY_SOLUTION = False
+SHOW_ONLY_SOLUTION = True
 
 # Show all the possible arcs between pyramid tiles
 SHOW_PYRAMID_ARCS = True
