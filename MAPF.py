@@ -53,6 +53,7 @@ class MAPF(MAMaze):
 
     self.__pyramid_arc_to_tiles = {}
     self.__tiles_to_pyramid_arc = {}
+    self.__tiles_to_pyramid_arc_inverse = {}
 
     self.__final_states = {}
 
@@ -239,6 +240,18 @@ class MAPF(MAMaze):
         elif not SHOW_ONLY_SOLUTION:
           out += add_point(*voxel, *merge_colors(voxel_colors[voxel]))
 
+    if SHOW_PYRAMID_ARCS:
+      for time_step in self.__tiles_to_pyramid_arc:  
+        for from_tile in self.__tiles_to_pyramid_arc[time_step]:
+          for to_tile in self.__tiles_to_pyramid_arc[time_step][from_tile]:
+            from_tile_pos = self.get_position_from_literal(self.__exploration_literal_to_tile[from_tile])
+            to_tile_pos = self.get_position_from_literal(self.__exploration_literal_to_tile[to_tile])
+            if self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile] in model:
+              out += add_point((from_tile_pos[1] + to_tile_pos[1]) / 2, (from_tile_pos[0] + to_tile_pos[0]) / 2, -(time_step + 1.5), 0.3, 0.3, 0.3)
+            elif not(SHOW_ONLY_SOLUTION):
+              out += add_point((from_tile_pos[1] + to_tile_pos[1]) / 2, (from_tile_pos[0] + to_tile_pos[0]) / 2, -(time_step + 1.5), 0.9, 0.9, 0.9)
+
+
     with open(OUTPUT_DIR + "pc.xyzrgb", "w") as f:
       f.write(out)
 
@@ -326,6 +339,7 @@ class MAPF(MAMaze):
 
     self.__pyramid_arc_to_tiles = {}
     self.__tiles_to_pyramid_arc = {}
+    self.__tiles_to_pyramid_arc_inverse = {}
 
     next_literal = 1
 
@@ -466,25 +480,21 @@ class MAPF(MAMaze):
         for neigh in neighs:
           if step_time < self.__makespan:
             if not(self.flags & FLAGS.OPTIMIZE_PYRAMIDS) or neigh in self.__tile_to_exploration_literals and step_time + 1 in self.__tile_to_exploration_literals[neigh]:
+              if step_time not in self.__tiles_to_pyramid_arc:
+                self.__tiles_to_pyramid_arc[step_time] = {}
+                self.__tiles_to_pyramid_arc_inverse[step_time] = {}
+                
               for neigh_exploration_literal in self.__tile_to_exploration_literals[neigh][step_time + 1]:
                 for copy_tile in self.__tile_to_exploration_literals[tile][step_time]:
-                  if copy_tile not in self.__tiles_to_pyramid_arc:
-                    self.__tiles_to_pyramid_arc[copy_tile] = {}
+                  if copy_tile not in self.__tiles_to_pyramid_arc[step_time]:
+                    self.__tiles_to_pyramid_arc[step_time][copy_tile] = {}
+                  if neigh_exploration_literal not in self.__tiles_to_pyramid_arc[step_time]:
+                    self.__tiles_to_pyramid_arc_inverse[step_time][neigh_exploration_literal] = {}
 
-                  self.__tiles_to_pyramid_arc[copy_tile][neigh_exploration_literal] = next_literal
-                  self.__pyramid_arc_to_tiles[next_literal] = (copy_tile, neigh_exploration_literal)
+                  self.__tiles_to_pyramid_arc[step_time][copy_tile][neigh_exploration_literal] = next_literal
+                  self.__tiles_to_pyramid_arc_inverse[step_time][neigh_exploration_literal][copy_tile] = next_literal
+                  self.__pyramid_arc_to_tiles[next_literal] = (step_time, copy_tile, neigh_exploration_literal)
                 next_literal += 1
-    
-
-    # 6 11 7
-    tile = self.get_literal_from_position(6, 11)
-    tile_to = self.get_literal_from_position(7, 11)
-    for step_time in self.__tile_to_exploration_literals[tile]:
-      for copy_literal in self.__tile_to_exploration_literals[tile][step_time]:
-        print(step_time, self.__tiles_to_pyramid_arc[copy_literal])
-
-    for copy_literal in self.__tile_to_exploration_literals[tile_to][7]:
-      print(copy_literal)
 
     self.__maximum_pyramid_arc_literal = next_literal - 1
     #
@@ -592,51 +602,48 @@ class MAPF(MAMaze):
   def get_tile_clauses(self):
     clauses = []
 
-    for from_tile in self.__tiles_to_pyramid_arc:
-      arcs = []
-      for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
-        arcs.append(self.__tiles_to_pyramid_arc[from_tile][to_tile])
+    for time_step in self.__tiles_to_pyramid_arc:
+      for from_tile in self.__tiles_to_pyramid_arc[time_step]:
+        arcs = []
+        for to_tile in self.__tiles_to_pyramid_arc[time_step][from_tile]:
+          arcs.append(self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile])
 
-        # H1
-        if self.flags & FLAGS.RESTRICTION_H1: clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[from_tile][to_tile]])
-        # H2
-        if self.flags & FLAGS.RESTRICTION_H2: clauses.append([-from_tile, -self.__tiles_to_pyramid_arc[from_tile][to_tile], to_tile])
+          # H1
+          if self.flags & FLAGS.RESTRICTION_H1: clauses.append([-from_tile, -to_tile, self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile]])
+          # H2
+          if self.flags & FLAGS.RESTRICTION_H2: clauses.append([-from_tile, -self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile], to_tile])
 
-        if to_tile in self.__tiles_to_pyramid_arc and from_tile in self.__tiles_to_pyramid_arc[to_tile]:
-          # H9
-          if self.flags & FLAGS.RESTRICTION_H9: clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], -self.__tiles_to_pyramid_arc[to_tile][from_tile]])
+          if to_tile in self.__tiles_to_pyramid_arc[time_step] and from_tile in self.__tiles_to_pyramid_arc[time_step][to_tile]:
+            # H9
+            if self.flags & FLAGS.RESTRICTION_H9: clauses.append([-self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile], -self.__tiles_to_pyramid_arc[time_step][to_tile][from_tile]])
+          
+          # H10
+          if to_tile in self.__tiles_to_pyramid_arc[time_step] and to_tile in self.__tiles_to_pyramid_arc[time_step][to_tile]:
+            if self.flags & FLAGS.RESTRICTION_H10: clauses.append([-self.__tiles_to_pyramid_arc[time_step][from_tile][to_tile], self.__tiles_to_pyramid_arc[time_step][to_tile][to_tile]])
         
-        # H10
-        if to_tile in self.__tiles_to_pyramid_arc and to_tile in self.__tiles_to_pyramid_arc[to_tile]:
-          if self.flags & FLAGS.RESTRICTION_H10: clauses.append([-self.__tiles_to_pyramid_arc[from_tile][to_tile], self.__tiles_to_pyramid_arc[to_tile][to_tile]])
-      
-      # C1
-      if self.flags & FLAGS.RESTRICTION_C1: clauses.extend([clause for clause in card.CardEnc.equals(
-          lits=arcs,
-          bound=1,
-          vpool=self.__idpool,
-          encoding=card.EncType.pairwise
-        ).clauses
-      ])
+        # C1
+        if self.flags & FLAGS.RESTRICTION_C1: clauses.extend([clause for clause in card.CardEnc.equals(
+            lits=arcs,
+            bound=1,
+            vpool=self.__idpool,
+            encoding=card.EncType.pairwise
+          ).clauses
+        ])
     
-    done_arcs = []
-    for from_tile in self.__tiles_to_pyramid_arc:
-      for to_tile in self.__tiles_to_pyramid_arc[from_tile]:
-        arcs = set()
-        for from_tile2 in self.__tiles_to_pyramid_arc:
-          if to_tile in self.__tiles_to_pyramid_arc and from_tile2 in self.__tiles_to_pyramid_arc[to_tile]:
-            arcs.add(self.__tiles_to_pyramid_arc[to_tile][from_tile2])
-        if arcs not in done_arcs:
-          done_arcs.append(arcs)
+    for time_step in self.__tiles_to_pyramid_arc_inverse:
+      for to_tile in self.__tiles_to_pyramid_arc_inverse[time_step]:
+        arcs = []
+        for from_tile in self.__tiles_to_pyramid_arc_inverse[time_step][to_tile]:
+          arcs.append(self.__tiles_to_pyramid_arc_inverse[time_step][to_tile][from_tile])
 
-          if len(arcs) > 0:
-            clauses.extend([clause for clause in card.CardEnc.equals(
-                lits=list(arcs),
-                bound=1,
-                vpool=self.__idpool,
-                encoding=card.EncType.pairwise
-              ).clauses
-            ])
+        # C1⁻¹
+        # clauses.extend([clause for clause in card.CardEnc.equals(
+        #     lits=arcs,
+        #     bound=1,
+        #     vpool=self.__idpool,
+        #     encoding=card.EncType.pairwise
+        #   ).clauses
+        # ])
 
 
 

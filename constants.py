@@ -55,6 +55,9 @@ SHOW_DISTINC_PYRAMIDS = True
 # Don't show all the exploration space, only the solution
 SHOW_ONLY_SOLUTION = False
 
+# Show all the possible arcs between pyramid tiles
+SHOW_PYRAMID_ARCS = True
+
 #####################################################################################################################
 # Opciones de visualizacion de variables
 ###
